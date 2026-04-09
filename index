@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+  <title>大家TALKS · 轻声讨论</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body { background: #f4f7fb; font-family: 'Inter', system-ui, sans-serif; }
+    .card-hover { transition: all 0.15s ease; }
+    .card-hover:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -8px rgba(0, 34, 68, 0.08); }
+    .topic-content img { max-width: 100%; border-radius: 1rem; margin: 0.75rem 0; box-shadow: 0 4px 10px rgba(0,0,0,0.02); cursor: pointer; }
+    .topic-content img:hover { opacity: 0.85; }
+    .avatar-placeholder { background: linear-gradient(135deg, #a0c8ff, #d9e6ff); }
+    .edit-title-input { font-size: 1.5rem; font-weight: 700; border: none; border-bottom: 2px solid #e2e8f0; padding: 0.25rem 0; outline: none; width: 100%; background: transparent; }
+    .edit-title-input:focus { border-bottom-color: #6366f1; }
+    .edit-content-textarea { width: 100%; border: none; resize: vertical; outline: none; background: transparent; font-size: 1rem; line-height: 1.6; color: #374151; min-height: 140px; }
+    .format-bar button { transition: all 0.1s; }
+    .format-bar button:hover { background: #eef2ff; }
+  </style>
+</head>
+<body class="antialiased text-gray-800">
+<div id="root"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
+
+<script type="text/babel">
+  // ---------- 存储与工具 ----------
+  const STORAGE_KEYS = { USERS: 'talks_users', TOPICS: 'talks_topics', COMMENTS: 'talks_comments', CURRENT_USER: 'talks_current_user' };
+
+  const initData = () => {
+    if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
+      const defaultUsers = [
+        { id: 'u1', name: '匿名树懒', avatar: null, isAnonymous: false },
+        { id: 'u2', name: '微风', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Misty', isAnonymous: false },
+        { id: 'u_admin', name: '园丁', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Gardener', isAnonymous: false }
+      ];
+      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(defaultUsers));
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.TOPICS)) {
+      const now = new Date();
+      const topics = [
+        { id: 't1', title: '🌿 你最近单曲循环的一首歌', content: '分享一首让你心动的旋律，可以上传专辑封面～<br>大家可以在此留言，说说自己的心声~', authorId: 'u1', createdAt: new Date(now - 3*86400000).toISOString(), images: [] },
+        { id: 't2', title: '📚 四月读的第一本书', content: '聊聊阅读的瞬间，文字或图片都可以。', authorId: 'u2', createdAt: new Date(now - 1*86400000).toISOString(), images: ['https://picsum.photos/400/200?random=42'] }
+      ];
+      localStorage.setItem(STORAGE_KEYS.TOPICS, JSON.stringify(topics));
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.COMMENTS)) {
+      const comments = [
+        { id: 'c1', topicId: 't1', content: '《深夜港湾》循环三天了', authorId: 'u2', createdAt: new Date(Date.now() - 2*86400000).toISOString(), parentId: null, likes: ['u1'] },
+        { id: 'c2', topicId: 't1', content: '最近在听告五人，封面好看！', authorId: 'u1', createdAt: new Date(Date.now() - 1*86400000).toISOString(), parentId: null, likes: ['u2','u_admin'] },
+        { id: 'c3', topicId: 't2', content: '《夜晚的潜水艇》想象力绝了', authorId: 'u_admin', createdAt: new Date().toISOString(), parentId: null, likes: [] }
+      ];
+      localStorage.setItem(STORAGE_KEYS.COMMENTS, JSON.stringify(comments));
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.CURRENT_USER)) {
+      const users = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]');
+      let guest = users.find(u => u.id === 'u_guest');
+      if (!guest) {
+        guest = { id: 'u_guest', name: '过客·青', avatar: null, isAnonymous: true };
+        users.push(guest);
+        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+      }
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(guest));
+    }
+  };
+  initData();
+
+  const getUsers = () => JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]');
+  const getTopics = () => JSON.parse(localStorage.getItem(STORAGE_KEYS.TOPICS) || '[]');
+  const getComments = () => JSON.parse(localStorage.getItem(STORAGE_KEYS.COMMENTS) || '[]');
+  const getCurrentUser = () => JSON.parse(localStorage.getItem(STORAGE_KEYS.CURRENT_USER) || '{}');
+  
+  const saveUsers = (u) => localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(u));
+  const saveTopics = (t) => localStorage.setItem(STORAGE_KEYS.TOPICS, JSON.stringify(t));
+  const saveComments = (c) => localStorage.setItem(STORAGE_KEYS.COMMENTS, JSON.stringify(c));
+  const saveCurrentUser = (u) => localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(u));
+
+  const genId = () => Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+
+  // 格式化文本：换行转<br>，保留安全标签
+  const formatContent = (raw) => {
+    if (!raw) return '';
+    // 将换行转为 <br>
+    let html = raw.replace(/\n/g, '<br>');
+    // 允许的标签：strong, b, div(带text-align样式), br, img(已处理)
+    return html;
+  };
+
+  // ---------- Context ----------
+  const AppContext = React.createContext();
+  const AppProvider = ({ children }) => {
+    const [users, setUsers] = React.useState(getUsers());
+    const [topics, setTopics] = React.useState(getTopics());
+    const [comments, setComments] = React.useState(getComments());
+    const [currentUser, setCurrentUser] = React.useState(getCurrentUser());
+    const [toast, setToast] = React.useState(null);
+
+    const showToast = (msg) => { setToast({ msg }); setTimeout(() => setToast(null), 2500); };
+    const refreshData = () => { setUsers(getUsers()); setTopics(getTopics()); setComments(getComments()); setCurrentUser(getCurrentUser()); };
+
+    const updateCurrentUser = (updates) => {
+      const updated = { ...currentUser, ...updates };
+      const allUsers = getUsers();
+      const idx = allUsers.findIndex(u => u.id === updated.id);
+      if (idx >= 0) allUsers[idx] = updated; else allUsers.push(updated);
+      saveUsers(allUsers); saveCurrentUser(updated); refreshData(); showToast('资料已更新');
+    };
+
+    const addTopic = (title, content, images = []) => {
+      const newTopic = { id: genId(), title: title.trim(), content: content.trim(), authorId: currentUser.id, createdAt: new Date().toISOString(), images };
+      saveTopics([...topics, newTopic]); refreshData(); showToast('✨ 话题发布成功');
+    };
+    const updateTopic = (topicId, updates) => {
+      const updated = topics.map(t => t.id === topicId ? { ...t, ...updates } : t);
+      saveTopics(updated); refreshData(); showToast('话题已更新');
+    };
+    const deleteTopic = (topicId) => {
+      saveTopics(topics.filter(t => t.id !== topicId));
+      saveComments(comments.filter(c => c.topicId !== topicId));
+      refreshData(); showToast('话题已删除');
+    };
+    const addComment = (topicId, content, parentId = null) => {
+      const newComment = { id: genId(), topicId, content, authorId: currentUser.id, createdAt: new Date().toISOString(), parentId, likes: [] };
+      saveComments([...comments, newComment]); refreshData(); showToast('💬 评论已发布');
+    };
+    const toggleLike = (commentId) => {
+      const updated = comments.map(c => c.id === commentId ? { ...c, likes: c.likes?.includes(currentUser.id) ? c.likes.filter(id => id !== currentUser.id) : [...(c.likes||[]), currentUser.id] } : c);
+      saveComments(updated); refreshData();
+    };
+    const deleteComment = (commentId) => { saveComments(comments.filter(c => c.id !== commentId)); refreshData(); showToast('评论已删除'); };
+
+    return (
+      <AppContext.Provider value={{ users, topics, comments, currentUser, showToast, toast, refreshData, updateCurrentUser, addTopic, updateTopic, deleteTopic, addComment, toggleLike, deleteComment }}>
+        {children}
+      </AppContext.Provider>
+    );
+  };
+
+  // ---------- 通用组件 ----------
+  const Toast = () => { const { toast } = React.useContext(AppContext); return toast ? <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 bg-white/90 shadow-xl rounded-full text-sm">{toast.msg}</div> : null; };
+  const Avatar = ({ user, size = 'md' }) => {
+    const sizeClass = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-10 h-10 text-sm';
+    if (!user) return <div className={`${sizeClass} rounded-full bg-gray-200 flex items-center justify-center`}><i className="fas fa-user"></i></div>;
+    if (user.avatar) return <img src={user.avatar} className={`${sizeClass} rounded-full object-cover border`} alt={user.name} />;
+    return <div className={`${sizeClass} rounded-full avatar-placeholder flex items-center justify-center text-indigo-700 font-medium`}>{user.name?.charAt(0)}</div>;
+  };
+
+  const Lightbox = ({ images, initialIndex, onClose }) => {
+    const [idx, setIdx] = React.useState(initialIndex);
+    React.useEffect(() => { const h = (e) => e.key==='Escape'&&onClose(); window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h); },[]);
+    return (
+      <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="relative max-w-5xl" onClick={e=>e.stopPropagation()}>
+          <img src={images[idx]} className="max-h-[85vh] max-w-full object-contain rounded-xl" />
+          {images.length>1 && <><button onClick={()=>setIdx((idx-1+images.length)%images.length)} className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/20 text-white w-10 h-10 rounded-full"><i className="fas fa-chevron-left"></i></button>
+          <button onClick={()=>setIdx((idx+1)%images.length)} className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/20 text-white w-10 h-10 rounded-full"><i className="fas fa-chevron-right"></i></button></>}
+          <button onClick={onClose} className="absolute top-2 right-2 text-white bg-black/30 w-8 h-8 rounded-full"><i className="fas fa-times"></i></button>
+        </div>
+      </div>
+    );
+  };
+
+  const PasswordModal = ({ isOpen, onClose, onSuccess, actionLabel }) => {
+    const [pwd, setPwd] = React.useState(''); const [err, setErr] = React.useState('');
+    const submit = (e) => { e.preventDefault(); if(pwd==='Haday'){ onSuccess(); setPwd(''); onClose(); } else setErr('密码错误'); };
+    if(!isOpen) return null;
+    return (
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+        <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={e=>e.stopPropagation()}>
+          <h3 className="text-lg font-semibold">🔐 管理员验证</h3><p className="text-gray-500 text-sm mb-4">只有管理员才能{actionLabel}</p>
+          <form onSubmit={submit}><input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} className="w-full border rounded-xl px-4 py-3" autoFocus />{err&&<p className="text-red-400 text-sm">{err}</p>}
+            <div className="flex justify-end gap-3 mt-4"><button type="button" onClick={onClose} className="px-4 py-2 text-gray-500">取消</button><button type="submit" className="px-5 py-2 bg-indigo-600 text-white rounded-xl">验证</button></div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
+  // ---------- 带格式工具栏的编辑卡片 (排版与展示一致) ----------
+  const TopicFormCard = ({ initialData, onSave, onCancel }) => {
+    const [title, setTitle] = React.useState(initialData?.title || '');
+    const [content, setContent] = React.useState(initialData?.content || '');
+    const [images, setImages] = React.useState(initialData?.images || []);
+    const { currentUser } = React.useContext(AppContext);
+    const fileRef = React.useRef();
+    const textareaRef = React.useRef();
+
+    const insertTag = (openTag, closeTag = '') => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      const start = ta.selectionStart, end = ta.selectionEnd;
+      const selected = content.substring(start, end);
+      const newText = content.substring(0, start) + openTag + selected + (closeTag || openTag.replace('<', '</')) + content.substring(end);
+      setContent(newText);
+      setTimeout(() => { ta.focus(); ta.setSelectionRange(start+openTag.length, start+openTag.length+selected.length); }, 20);
+    };
+
+    const insertAlignDiv = (align) => {
+      const tag = `<div style="text-align:${align}">`;
+      insertTag(tag, '</div>');
+    };
+
+    const handleImageUpload = (e) => {
+      const file = e.target.files[0];
+      if (file) { const r = new FileReader(); r.onload = (ev) => setImages(p=>[...p, ev.target.result]); r.readAsDataURL(file); }
+    };
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      if (!title.trim() || !content.trim()) { alert('标题和内容不能为空'); return; }
+      onSave({ title: title.trim(), content: content.trim(), images });
+    };
+
+    return (
+      <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 shadow-sm border">
+        <div className="flex items-start gap-4">
+          <Avatar user={currentUser} />
+          <div className="flex-1">
+            <input type="text" className="edit-title-input" placeholder="话题标题" value={title} onChange={e=>setTitle(e.target.value)} />
+            <div className="text-xs text-gray-400 mt-1">{currentUser.name} · 正在编辑</div>
+          </div>
+        </div>
+        {/* 格式工具栏 */}
+        <div className="mt-4 flex gap-1 format-bar">
+          <button type="button" onClick={() => insertTag('<strong>', '</strong>')} className="px-3 py-1 text-sm bg-gray-100 rounded-full hover:bg-indigo-100" title="加粗"><i className="fas fa-bold"></i></button>
+          <button type="button" onClick={() => insertAlignDiv('left')} className="px-3 py-1 text-sm bg-gray-100 rounded-full hover:bg-indigo-100" title="左对齐"><i className="fas fa-align-left"></i></button>
+          <button type="button" onClick={() => insertAlignDiv('center')} className="px-3 py-1 text-sm bg-gray-100 rounded-full hover:bg-indigo-100" title="居中"><i className="fas fa-align-center"></i></button>
+          <button type="button" onClick={() => insertAlignDiv('right')} className="px-3 py-1 text-sm bg-gray-100 rounded-full hover:bg-indigo-100" title="右对齐"><i className="fas fa-align-right"></i></button>
+          <span className="text-xs text-gray-400 ml-2 self-center">选中文字后点击加粗，对齐需插入容器</span>
+        </div>
+        <div className="mt-2">
+          <textarea
+            ref={textareaRef}
+            className="edit-content-textarea"
+            placeholder="引导语／内容（可嵌入图片、加粗、对齐）"
+            value={content}
+            onChange={e => setContent(e.target.value)}
+          />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-3">
+          {images.map((img,i) => (
+            <div key={i} className="relative w-24 h-24 rounded-xl overflow-hidden border">
+              <img src={img} className="w-full h-full object-cover" />
+              <button type="button" onClick={()=>setImages(p=>p.filter((_,j)=>j!==i))} className="absolute top-0 right-0 bg-black/40 text-white w-5 h-5 flex items-center justify-center rounded-bl"><i className="fas fa-times"></i></button>
+            </div>
+          ))}
+          <button type="button" onClick={()=>fileRef.current.click()} className="w-24 h-24 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-gray-400 hover:text-indigo-500">
+            <i className="fas fa-plus text-xl"></i><span className="text-xs">添加图片</span>
+          </button>
+          <input type="file" accept="image/*" ref={fileRef} onChange={handleImageUpload} className="hidden" />
+        </div>
+        <div className="flex justify-end gap-3 mt-6">
+          <button type="button" onClick={onCancel} className="px-5 py-2 text-gray-500 rounded-full hover:bg-gray-100">取消</button>
+          <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-full shadow-sm">发布</button>
+        </div>
+      </form>
+    );
+  };
+
+  // 头部、资料面板（略简，保持完整）
+  const Header = () => {
+    const { currentUser } = React.useContext(AppContext);
+    const [show, setShow] = React.useState(false);
+    return (
+      <header className="sticky top-0 bg-white/70 backdrop-blur-md border-b z-30 px-4 py-3 flex justify-between">
+        <div className="flex items-center gap-2"><i className="fas fa-comment-dots text-2xl text-indigo-500"></i><h1 className="text-xl font-bold">大家<span className="text-indigo-600">TALKS</span></h1></div>
+        <div className="relative"><button onClick={()=>setShow(!show)} className="flex items-center gap-2"><Avatar user={currentUser} size="sm" /><span className="hidden sm:inline">{currentUser.name}</span></button>
+          {show && <div className="absolute right-0 mt-3 w-56 bg-white rounded-xl shadow-xl border p-3 z-40"><ProfilePanel compact onClose={()=>setShow(false)} /></div>}
+        </div>
+      </header>
+    );
+  };
+  const ProfilePanel = ({ compact, onClose }) => {
+    const { currentUser, updateCurrentUser } = React.useContext(AppContext);
+    const [edit, setEdit] = React.useState(false);
+    const [name, setName] = React.useState(currentUser.name);
+    const [isAnon, setIsAnon] = React.useState(currentUser.isAnonymous);
+    const [avatarFile, setAvatarFile] = React.useState(null);
+    const save = () => {
+      if(avatarFile){ const r = new FileReader(); r.onload = (e) => updateCurrentUser({name:name.trim(), isAnonymous:isAnon, avatar:e.target.result}); r.readAsDataURL(avatarFile); }
+      else updateCurrentUser({name:name.trim(), isAnonymous:isAnon});
+      setEdit(false); onClose?.();
+    };
+    return (<div className="space-y-3"><div className="flex items-center gap-3"><Avatar user={currentUser}/><div><p className="font-medium">{currentUser.name}</p><p className="text-xs text-gray-400">{currentUser.isAnonymous?'匿名':'昵称'}</p></div></div>
+      {!compact && <button onClick={()=>setEdit(!edit)} className="text-sm text-indigo-600"><i className="fas fa-pen mr-1"></i>编辑</button>}
+      {edit && <div className="space-y-2 pt-2 border-t"><input className="w-full border rounded-lg px-3 py-2 text-sm" value={name} onChange={e=>setName(e.target.value)}/>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={isAnon} onChange={e=>setIsAnon(e.target.checked)}/>匿名</label>
+        <input type="file" accept="image/*" onChange={e=>setAvatarFile(e.target.files[0])} />
+        <div className="flex gap-2"><button onClick={save} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm">保存</button><button onClick={()=>setEdit(false)} className="text-gray-500 text-sm">取消</button></div>
+      </div>}
+    </div>);
+  };
+
+  // 首页
+  const HomePage = () => {
+    const { topics, comments, addTopic } = React.useContext(AppContext);
+    const [showCreate, setShowCreate] = React.useState(false);
+    const [pwdModal, setPwdModal] = React.useState(false);
+    const getCount = (id) => comments.filter(c=>c.topicId===id).length;
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-6">
+        <div className="flex justify-between mb-6"><h2 className="text-2xl font-semibold"><i className="fas fa-newspaper text-indigo-400 mr-2"></i>往期话题</h2>
+          <button onClick={()=>setPwdModal(true)} className="bg-indigo-600 text-white px-5 py-2.5 rounded-full shadow text-sm"><i className="fas fa-plus-circle mr-1"></i>创建话题</button>
+        </div>
+        <div className="space-y-4">
+          {topics.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).map(t => {
+            const author = getUsers().find(u=>u.id===t.authorId);
+            return (
+              <div key={t.id} className="bg-white rounded-2xl p-5 shadow-sm border card-hover cursor-pointer" onClick={()=>window.location.hash=`#/topic/${t.id}`}>
+                <div className="flex gap-3"><Avatar user={author}/><div className="flex-1">
+                  <div className="flex justify-between"><h3 className="text-lg font-bold">{t.title}</h3><span className="text-xs text-gray-400">{new Date(t.createdAt).toLocaleDateString()}</span></div>
+                  <p className="text-gray-600 text-sm line-clamp-2 my-1" dangerouslySetInnerHTML={{__html: formatContent(t.content).substring(0,120)}} />
+                  {t.images?.length>0 && <div className="flex gap-1 mt-1"><i className="fas fa-image text-gray-400 text-xs"></i><span className="text-xs">{t.images.length}张图</span></div>}
+                  <div className="flex mt-2 text-xs text-gray-500"><i className="far fa-comment mr-1"></i>{getCount(t.id)} 评论</div>
+                </div></div>
+              </div>
+          )})}
+        </div>
+        <PasswordModal isOpen={pwdModal} onClose={()=>setPwdModal(false)} onSuccess={()=>setShowCreate(true)} actionLabel="创建话题" />
+        {showCreate && <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className="max-w-2xl w-full"><TopicFormCard onSave={(data)=>{addTopic(data.title,data.content,data.images);setShowCreate(false);}} onCancel={()=>setShowCreate(false)} /></div></div>}
+      </div>
+    );
+  };
+
+  // 话题详情
+  const TopicDetail = ({ id }) => {
+    const { topics, comments, users, currentUser, addComment, toggleLike, deleteComment, deleteTopic, updateTopic } = React.useContext(AppContext);
+    const [text, setText] = React.useState('');
+    const [replyTo, setReplyTo] = React.useState(null);
+    const [pwdAction, setPwdAction] = React.useState(null);
+    const [editing, setEditing] = React.useState(false);
+    const [lightbox, setLightbox] = React.useState({open:false,images:[],index:0});
+    const topic = topics.find(t=>t.id===id);
+    if(!topic) return <div className="p-10 text-center">话题不存在</div>;
+    const author = users.find(u=>u.id===topic.authorId);
+    const topicComments = comments.filter(c=>c.topicId===id);
+    const sorted = [...topicComments].sort((a,b)=>{
+      const al = a.likes?.length||0, bl = b.likes?.length||0;
+      if(al!==bl) return bl-al;
+      return new Date(b.createdAt)-new Date(a.createdAt);
+    });
+
+    const submitComment = (e) => { e.preventDefault(); if(!text.trim()) return; addComment(id, text, replyTo?.id); setText(''); setReplyTo(null); };
+    const execAdmin = () => {
+      if(!pwdAction) return;
+      const {type,target} = pwdAction;
+      if(type==='delete-topic') deleteTopic(target);
+      else if(type==='delete-comment') deleteComment(target);
+      else if(type==='edit-topic') setEditing(true);
+      setPwdAction(null);
+    };
+
+    if(editing) return <div className="max-w-3xl mx-auto p-4"><TopicFormCard initialData={topic} onSave={(data)=>{updateTopic(id,data);setEditing(false);}} onCancel={()=>setEditing(false)} /></div>;
+
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-6">
+        <button onClick={()=>window.location.hash='/'} className="mb-4 text-indigo-600"><i className="fas fa-arrow-left mr-2"></i>返回首页</button>
+        <div className="bg-white rounded-3xl p-6 shadow-sm border mb-8">
+          <div className="flex justify-between"><div className="flex gap-3"><Avatar user={author}/><div><h2 className="text-2xl font-bold">{topic.title}</h2><span className="text-xs text-gray-400">{author?.name}</span></div></div>
+            <div className="flex gap-2"><button onClick={()=>setPwdAction({type:'edit-topic',target:id})} className="text-gray-400 hover:text-indigo-600"><i className="fas fa-edit"></i></button><button onClick={()=>setPwdAction({type:'delete-topic',target:id})} className="text-gray-400 hover:text-red-500"><i className="fas fa-trash"></i></button></div>
+          </div>
+          <div className="mt-5 topic-content" dangerouslySetInnerHTML={{__html: formatContent(topic.content)}} />
+          {topic.images?.length>0 && <div className="flex flex-wrap gap-3 mt-4">{topic.images.map((img,i)=><img key={i} src={img} className="max-h-48 rounded-xl border cursor-pointer" onClick={()=>setLightbox({open:true,images:topic.images,index:i})} />)}</div>}
+        </div>
+        <div className="mb-6"><h3 className="font-semibold text-lg mb-3"><i className="far fa-comments mr-2"></i>留言区 · {topicComments.length} 条</h3>
+          <form onSubmit={submitComment} className="flex flex-col sm:flex-row gap-2 mb-6">
+            <div className="flex-1 relative"><input value={text} onChange={e=>setText(e.target.value)} placeholder={replyTo?`回复 @${users.find(u=>u.id===replyTo.authorId)?.name}`:"写下你的想法..."} className="w-full border rounded-full px-5 py-3 pr-12" />{replyTo&&<button type="button" onClick={()=>setReplyTo(null)} className="absolute right-3 top-3 text-gray-400"><i className="fas fa-times"></i></button>}</div>
+            <button type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-full">提交</button>
+          </form>
+          <div className="space-y-4">{sorted.map(c=>{
+            const ca = users.find(u=>u.id===c.authorId);
+            const liked = c.likes?.includes(currentUser.id);
+            const parent = c.parentId ? comments.find(x=>x.id===c.parentId) : null;
+            return (<div key={c.id} className={`bg-white/90 rounded-xl p-4 border ${c.parentId?'ml-8 border-l-4 border-l-indigo-200':''}`}>
+              <div className="flex gap-3"><Avatar user={ca} size="sm"/><div className="flex-1">
+                <div className="flex justify-between"><span className="font-medium text-sm">{ca?.name}</span><span className="text-xs text-gray-400">{new Date(c.createdAt).toLocaleString()}</span></div>
+                {parent&&<div className="text-xs text-indigo-500 mb-1">↳ 回复 @{users.find(u=>u.id===parent.authorId)?.name}</div>}
+                <p className="text-gray-700 mt-1">{c.content}</p>
+                <div className="flex items-center gap-5 mt-2 text-sm">
+                  <button onClick={()=>toggleLike(c.id)} className={`flex items-center gap-1 ${liked?'text-red-500':'text-gray-500'}`}><i className={`${liked?'fas':'far'} fa-heart`}></i> {c.likes?.length||0}</button>
+                  <button onClick={()=>{setReplyTo(c);setText('');}} className="text-gray-500 text-xs"><i className="far fa-reply mr-1"></i>回复</button>
+                  {c.authorId===currentUser.id && <button onClick={()=>setPwdAction({type:'delete-comment',target:c.id})} className="text-gray-400 text-xs"><i className="far fa-trash-alt"></i></button>}
+                </div>
+              </div></div>
+            </div>);
+          })}</div>
+        </div>
+        <PasswordModal isOpen={!!pwdAction} onClose={()=>setPwdAction(null)} onSuccess={execAdmin} actionLabel={pwdAction?.type==='delete-topic'?'删除话题':'管理操作'} />
+        {lightbox.open && <Lightbox images={lightbox.images} initialIndex={lightbox.index} onClose={()=>setLightbox({open:false})} />}
+      </div>
+    );
+  };
+
+  const App = () => {
+    const [hash, setHash] = React.useState(window.location.hash);
+    React.useEffect(()=>{const h=()=>setHash(window.location.hash); window.addEventListener('hashchange',h); return ()=>window.removeEventListener('hashchange',h);},[]);
+    const view = hash.startsWith('#/topic/') ? <TopicDetail id={hash.split('/')[2]} /> : <HomePage />;
+    return <AppProvider><div className="min-h-screen flex flex-col"><Header /><main className="flex-1">{view}</main><Toast /><footer className="text-center text-xs text-gray-400 py-6 border-t">大家TALKS · 轻声分享</footer></div></AppProvider>;
+  };
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
